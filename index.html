@@ -1703,7 +1703,7 @@ function renderInspector(){
       <ul class="howto">
         <li>${S.mode==='grid' ? '<b>Each dashed line is a post edge.</b> Anything crossing one continues on the neighboring tile.' : '<b>Each dashed seam is a swipe.</b> Anything crossing one carries into the next slide.'}</li>
         <li><b>Tap to select, then drag.</b> ${mobile?'Pinch with two fingers to resize and rotate.':'Corner handles resize; the top handle rotates.'}</li>
-        <li><b>Stack freely.</b> Use Front/Back or the Layers tab, and lock backgrounds so they stay put.</li>
+        <li><b>Stack freely.</b> Use Front/Back or the Layers tab, and lock backgrounds so they stay put. ${mobile?'Double-tap':'Double-click'} empty space to select a locked background.</li>
         <li><b>${mobile?'Double-tap':'Double-click'} a photo</b> to slide it around inside its frame.</li>
       </ul>
     </section>
@@ -1740,7 +1740,7 @@ function renderInspector(){
       ${!isMasked(el) ? range('radius','Corner radius', el.radius, 0, 300, 1) : ''}
       ${im ? range('shade','Bottom shade (for text on top)', el.shade||0, 0, 1, .01) : ''}
     </section>
-    ${placement(el, `<div class="btnrow"><button class="btn" data-act="seam">Center on seam</button><button class="btn" data-act="fillslide">Fill slide</button><button class="btn" data-act="span">Full spread</button></div>`)}`;
+    ${placement(el, `<div class="btnrow"><button class="btn" data-act="seam">Center on seam</button><button class="btn" data-act="fillslide">Fill slide</button><button class="btn" data-act="span">Full spread</button>${spansTiles(el) ? '<button class="btn" data-act="perslide">One per slide</button>' : ''}</div>`)}`;
   } else if (el.type==='text'){
     box.innerHTML = `
     <section id="sec-text">
@@ -1843,8 +1843,35 @@ ins.addEventListener('click', e => {
   else if (a==='lookall'){ let n = 0; S.els.forEach(o => { if (o.type==='photo' && o!==el){ o.look = fullLook(el.look); o.preset = el.preset; n++; } }); renderEls(); commit(); toast(`Look applied to ${n} more photo${n===1?'':'s'}`, {label:'Undo', fn:undo}); }
   else if (a==='seam'){ const k = clamp(Math.round((el.x+el.w/2)/SW), 1, Math.max(1,cols()-1)); el.x = Math.round(k*SW - el.w/2); finishGeo(); }
   else if (a==='fillslide'){ const i = clamp(Math.floor((el.x+el.w/2)/SW), 0, cols()-1), r = S.mode==='grid' ? clamp(Math.floor((el.y+el.h/2)/h), 0, S.rows-1) : 0; Object.assign(el, {x:i*SW, y:r*h, w:SW, h, rot:0}); finishGeo(); }
+  else if (a==='perslide') splitPerSlide(el);
   else if (a==='span'){ Object.assign(el, {x:0, y:0, w:TW(), h:CH(), rot:0, locked:true}); S.els = [el, ...S.els.filter(x => x!==el)]; finishGeo(); toast('Sent to the back and locked, so you can still scroll and tap through it', {label:'Unlock', fn:() => toggleLock(el)}); }
 });
+const tilesUnder = el => { const b = bbox(el), h = H(), out = []; for (let i=0;i<tileCount();i++){ const r = tileRect(i); if (b.l < r.x+SW-1 && b.r > r.x+1 && b.t < r.y+h-1 && b.b > r.y+1) out.push(i); } return out; };
+const spansTiles = el => tilesUnder(el).length > 1;
+function splitPerSlide(el){
+  const tiles = tilesUnder(el); if (tiles.length < 2) return;
+  const used = new Set(S.els.map(e => e.img).filter(Boolean)), pool = S.lib.filter(id => IMG[id] && !used.has(id));
+  const pieces = tiles.map((i, k) => {
+    const r = tileRect(i), c = JSON.parse(JSON.stringify(el));
+    return Object.assign(c, {id:uid(), x:r.x, y:r.y, w:SW, h:H(), rot:0, px:.5, py:.5, zoom:1, img: k===0 ? el.img : (pool.shift() || null)});
+  });
+  S.els.splice(S.els.indexOf(el), 1, ...pieces);
+  select(pieces[0].id); finishGeo();
+  toast(`Split into ${pieces.length} backgrounds. ${mobile ? 'Double-tap' : 'Double-click'} empty space on a slide to pick its background`);
+}
+function lockedPhotoAt(p){
+  for (let k=S.els.length-1; k>=0; k--){
+    const e = S.els[k]; if (e.type!=='photo' || !e.locked || e.hidden) continue;
+    const r = -e.rot*Math.PI/180, dx = p.x-(e.x+e.w/2), dy = p.y-(e.y+e.h/2);
+    if (Math.abs(dx*Math.cos(r)-dy*Math.sin(r)) <= e.w/2 && Math.abs(dx*Math.sin(r)+dy*Math.cos(r)) <= e.h/2) return e;
+  }
+  return null;
+}
+function bgDoubleTap(d){
+  const now = Date.now();
+  if (lastTap.id==='bg' && now-lastTap.t < 380){ lastTap = {id:null, t:0}; const e = lockedPhotoAt(d.p0); if (e){ selectEl(e, false); return true; } return false; }
+  lastTap = {id:'bg', t:now}; return false;
+}
 function finishGeo(){ renderEls(); updateSel(); renderCtx(); renderInspector(); renderLayers(); commit(); }
 function setRatio(r){
   if (r===S.ratio) return;
@@ -2136,7 +2163,7 @@ function endPointer(e, cancelled){
   if (d.mode==='marq'){
     $('#marq').hidden = true;
     if (cancelled) return;
-    if (!d.moved){ if (!d.add && sel && !addMode) select(null); return; }
+    if (!d.moved){ if (!d.add && !addMode && !bgDoubleTap(d) && sel) select(null); return; }
     const r = d.rect, ids = new Set();
     S.els.forEach(el => { if (el.locked || el.hidden) return; const b = bbox(el); if (b.l < r.r && b.r > r.l && b.t < r.b && b.b > r.t) groupIds(el).forEach(id => ids.add(id)); });
     const base = d.add || addMode ? (isMulti() ? multi : sel ? [sel] : []) : [];
@@ -2144,7 +2171,7 @@ function endPointer(e, cancelled){
     return;
   }
   if (cancelled){ if (d.moved && !['tap','bgtap'].includes(d.mode)) commit(); renderCtx(); return; }
-  if (d.mode==='bgtap'){ if (!d.moved && sel && !addMode) select(null); return; }
+  if (d.mode==='bgtap'){ if (!d.moved && !addMode && !bgDoubleTap(d) && sel) select(null); return; }
   if (d.mode==='tap'){
     if (d.moved) return;
     const el = byId(d.id); if (!el) return;
