@@ -154,7 +154,7 @@ h2{font:500 11px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;c
 .tick span{color:var(--ink)}
 .stripWrap{position:relative;box-shadow:0 1px 2px rgba(0,0,0,.10),0 16px 36px -14px rgba(0,0,0,.35)}
 .strip{position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-.layer{position:absolute;inset:0;overflow:hidden}
+.layer{position:absolute;inset:0;overflow:hidden;isolation:isolate}
 .overlay{position:absolute;inset:0;pointer-events:none}
 .el{position:absolute;touch-action:pan-x pan-y;cursor:move}
 .el.is-sel{touch-action:none}
@@ -2145,6 +2145,19 @@ window.addEventListener('pointermove', e => {
       nw = Math.max(30, o.w + sx*lx); nh = Math.max(30, o.h + sy*ly);
       let keep = e.shiftKey; if (el.type==='sticker' && !(STK[el.kind]||{}).free) keep = !keep;
       if (keep){ const a = o.w/o.h; if (nw/nh > a) nh = nw/a; else nw = nh*a; }
+      if (P.snap && !e.altKey && Math.abs(o.rot) < .5){
+        const L = snapLines(el), th = 7/scale;
+        const bx = sx ? best([sx > 0 ? o.x+nw : o.x+o.w-nw], L.xs, th) : null, by = sy ? best([sy > 0 ? o.y+nh : o.y+o.h-nh], L.ys, th) : null;
+        if (keep){
+          const a = o.w/o.h;
+          if (bx && (!by || Math.abs(bx.d) <= Math.abs(by.d))){ nw += sx*bx.d; nh = nw/a; showGuides([bx.line], []); }
+          else if (by){ nh += sy*by.d; nw = nh*a; showGuides([], [by.line]); }
+          else showGuides([], []);
+        } else {
+          if (bx) nw += sx*bx.d; if (by) nh += sy*by.d;
+          showGuides(bx ? [bx.line] : [], by ? [by.line] : []);
+        }
+      }
     }
     const syA = el.type==='text' ? 1 : sy;
     const ax = -sx*o.w/2, ay = -syA*o.h/2, c0x = o.x+o.w/2, c0y = o.y+o.h/2;
@@ -2200,13 +2213,17 @@ function doubleTap(el){
 }
 function snapMove(el, nx, ny, off, excl){
   if (!P.snap || off) return {x:nx, y:ny, gx:[], gy:[]};
-  const th = 7/scale, h = H(), b0 = bbox(el), xs = [], ys = [0, h/2, h];
-  for (let k=0;k<=cols();k++){ xs.push(k*SW); if (k<cols()) xs.push(k*SW+SW/2); }
-  if (S.mode==='grid') for (let r=1;r<=S.rows;r++){ ys.push(r*h, (r-.5)*h); }
-  for (const o of S.els){ if (o.id===el.id || o.hidden || (excl && excl.has(o.id))) continue; const b = bbox(o); xs.push(b.l, b.cx, b.r); ys.push(b.t, b.cy, b.b); }
+  const th = 7/scale, b0 = bbox(el), {xs, ys} = snapLines(el, excl);
   const cx = nx+el.w/2, cy = ny+el.h/2;
   const bx = best([cx-b0.hw, cx, cx+b0.hw], xs, th), by = best([cy-b0.hh, cy, cy+b0.hh], ys, th);
   return {x:nx+(bx?bx.d:0), y:ny+(by?by.d:0), gx:bx?[bx.line]:[], gy:by?[by.line]:[]};
+}
+function snapLines(el, excl){
+  const h = H(), xs = [], ys = [0, h/2, h];
+  for (let k=0;k<=cols();k++){ xs.push(k*SW); if (k<cols()) xs.push(k*SW+SW/2); }
+  if (S.mode==='grid') for (let r=1;r<=S.rows;r++){ ys.push(r*h, (r-.5)*h); }
+  for (const o of S.els){ if (o.id===el.id || o.hidden || (excl && excl.has(o.id))) continue; const b = bbox(o); xs.push(b.l, b.cx, b.r); ys.push(b.t, b.cy, b.b); }
+  return {xs, ys};
 }
 function best(cands, lines, th){ let b = null; for (const c of cands) for (const l of lines){ const d = l-c; if (Math.abs(d) < th && (!b || Math.abs(d) < Math.abs(b.d))) b = {d, line:l}; } return b; }
 document.addEventListener('gesturestart', e => e.preventDefault());
