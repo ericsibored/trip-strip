@@ -1,6 +1,6 @@
 // Trip Strip service worker: makes the editor installable and usable offline.
 // Bump VERSION whenever you deploy changes to index.html so phones pick them up.
-const VERSION = 'trip-strip-v1';
+const VERSION = 'trip-strip-v2';
 const CORE = [
   './',
   'index.html',

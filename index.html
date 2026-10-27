@@ -164,6 +164,7 @@ h2{font:500 11px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;c
 .el .pic{position:absolute;overflow:hidden}
 .el img,.el video{position:absolute;max-width:none;pointer-events:none;user-select:none;-webkit-user-drag:none}
 .el .ghost{opacity:0;pointer-events:none}
+.el .cap{position:absolute;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;pointer-events:none;user-select:none}
 .el.cropping .ghost{opacity:.35}
 .el.cropping{cursor:grab}
 .vig,.grain,.shade{position:absolute;inset:0;pointer-events:none}
@@ -232,6 +233,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0;height:24px
 .geo label{display:grid;gap:3px;font:500 10px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .geo input,.stepper input,textarea{width:100%;min-width:0;border:1px solid var(--line);background:var(--soft);color:var(--ink);border-radius:7px;font:400 12px var(--f-mono);padding:7px 6px;font-variant-numeric:tabular-nums}
 textarea{font:400 15px/1.4 var(--f-body);resize:vertical;min-height:72px}
+#capIn{width:100%;min-width:0;border:1px solid var(--line);background:var(--soft);color:var(--ink);border-radius:7px;font:400 15px var(--f-body);padding:8px}
 .stepper{display:grid;grid-template-columns:40px 1fr 40px;gap:6px}
 .stepper input{text-align:center;font-size:14px}
 .stepper .btn{height:36px;width:40px;padding:0;font-size:16px}
@@ -423,7 +425,7 @@ details.adj .field{margin-bottom:6px}
   .desk{display:none !important}
   .stage{padding:30px 20px 60px}
   .toast{bottom:calc(env(safe-area-inset-bottom,0px) + 84px)}
-  .geo input,.stepper input,textarea{font-size:16px}
+  .geo input,.stepper input,textarea,#capIn{font-size:16px}
   .btn{height:38px}
 }
 @media (max-width: 600px){ .brand .name, .brand .sepv{display:none} #previewBtn .pv-tx{display:none} #previewBtn{width:38px;padding:0} .tripbtn{max-width:130px} .tin{font-size:16px} }
@@ -732,7 +734,7 @@ function stickerSvg(kind, color, flip){
 
 /* ================= element factories ================= */
 const base = () => ({id:uid(), rot:0, opacity:1, locked:false, hidden:false});
-function Ph(x,y,w,h,o={}){return Object.assign(base(),{type:'photo',x:Math.round(x),y:Math.round(y),w:Math.round(w),h:Math.round(h),img:null,zoom:1,px:.5,py:.5,radius:0,frame:'none',frameColor:'#FFFFFF',shadow:false,look:{},preset:'orig',mask:'rect',flip:false,shade:0,vstart:0,vlen:0,outline:0,outlineColor:'#FFFFFF'},o)}
+function Ph(x,y,w,h,o={}){return Object.assign(base(),{type:'photo',x:Math.round(x),y:Math.round(y),w:Math.round(w),h:Math.round(h),img:null,zoom:1,px:.5,py:.5,radius:0,frame:'none',frameColor:'#FFFFFF',shadow:false,look:{},preset:'orig',mask:'rect',flip:false,shade:0,vstart:0,vlen:0,outline:0,outlineColor:'#FFFFFF',caption:'',capFont:'hand',capColor:'#16191D'},o)}
 function Tx(x,y,w,text,o={}){return Object.assign(base(),{type:'text',x:Math.round(x),y:Math.round(y),w:Math.round(w),h:40,text,font:'mono',size:28,color:'#16191D',align:'left',upper:false,spacing:0,box:'none',boxColor:'#16191D',stroke:0,strokeColor:'#16191D',tshadow:false},o)}
 function Sh(x,y,w,h,o={}){return Object.assign(base(),{type:'shape',kind:'rect',x:Math.round(x),y:Math.round(y),w:Math.round(w),h:Math.round(h),fill:'#FFFFFF',hole:'#E9E3D8',radius:0},o)}
 function St(kind,x,y,w,h,o={}){return Object.assign(base(),{type:'sticker',kind,x:Math.round(x),y:Math.round(y),w:Math.round(w),h:Math.round(h),color:STK[kind].color,flip:false},o)}
@@ -1050,6 +1052,15 @@ function maskPath(k, w, h){
   return `M0 0H${f(w)}V${f(h)}H0Z`;
 }
 const isMasked = el => el.mask && el.mask !== 'rect';
+function captionLayout(el){
+  if (el.frame!=='polaroid' || !el.caption) return null;
+  const i = frameInsets(el), f = FONTS[el.capFont] || FONTS.hand, w = Math.max(1, el.w - i.l - i.r);
+  let size = Math.max(8, i.b*.48);
+  mctx.font = fontCss(f, size); if (HAS_LS) mctx.letterSpacing = '0px';
+  const tw0 = mctx.measureText(el.caption).width;
+  if (tw0 > w) size = Math.max(8, size*w/tw0);
+  return {f, size, l:i.l, t:el.h - i.b, w, h:i.b};
+}
 function inner(el){ const i=frameInsets(el); return {i, iw:Math.max(1,el.w-i.l-i.r), ih:Math.max(1,el.h-i.t-i.b)}; }
 function coverRect(el, iw, ih){
   const im = IMG[el.img], sc = Math.max(iw/im.w, ih/im.h)*(el.zoom||1), dw = im.w*sc, dh = im.h*sc;
@@ -1132,11 +1143,11 @@ function updateNode(n, el){
   if (el.type==='photo'){
     const img = hasImg(el.img) ? el.img : null, IM = img && IMG[img], vid = !!(IM && IM.kind==='video'), alpha = !!(IM && IM.alpha && !vid);
     const src = IM ? (vid ? IM.url : (outlineUrl(el) || IM.url)) : '';
-    key = 'p3|' + img + '|' + src;
+    key = 'p4|' + img + '|' + src;
     if (n._k !== key){
       n.innerHTML = img
-        ? `<img class="ghost" alt="" draggable="false" src="${vid ? IM.poster : src}"><div class="fr"></div><div class="pic">${vid ? `<video muted playsinline autoplay loop preload="auto" src="${src}"></video>` : `<img alt="" draggable="false" src="${src}">`}<div class="vig"></div><div class="shade"></div><div class="grain"></div></div>`
-        : `<div class="fr"></div><div class="pic"><div class="ph"><b>+</b><span>Tap to add photo</span></div></div>`;
+        ? `<img class="ghost" alt="" draggable="false" src="${vid ? IM.poster : src}"><div class="fr"></div><div class="pic">${vid ? `<video muted playsinline autoplay loop preload="auto" src="${src}"></video>` : `<img alt="" draggable="false" src="${src}">`}<div class="vig"></div><div class="shade"></div><div class="grain"></div></div><div class="cap"></div>`
+        : `<div class="fr"></div><div class="pic"><div class="ph"><b>+</b><span>Tap to add photo</span></div></div><div class="cap"></div>`;
       n._k = key;
       if (vid) wireClip(n.querySelector('video'), el.id);
     }
@@ -1147,6 +1158,9 @@ function updateNode(n, el){
     const dropF = `drop-shadow(0 ${(el.w*.012).toFixed(1)}px ${(el.w*.0175).toFixed(1)}px rgba(0,0,0,.3))`;
     pic.style.cssText = `left:${i.l}px;top:${i.t}px;width:${iw}px;height:${ih}px;border-radius:${m?0:ri}px;${innerClip ? `clip-path:path('${maskPath(el.mask, iw, ih)}');` : ''}${!m && el.frame==='none' && el.shadow && img && !alpha ? shadowCss(el) : ''}${alpha && el.shadow && el.frame==='none' && !m ? `filter:${dropF};` : ''}`;
     if (m && el.shadow && (img || el.frame!=='none')) n.style.filter = dropF;
+    const cap = n.querySelector('.cap'), C = captionLayout(el);
+    if (C){ cap.style.cssText = `left:${C.l}px;top:${C.t}px;width:${C.w}px;height:${C.h}px;font:${fontCss(C.f, C.size)};color:${el.capColor}`; cap.textContent = el.caption; }
+    else { cap.style.cssText = 'display:none'; cap.textContent = ''; }
     if (img){
       const c = coverRect(el, iw, ih), L = fullLook(el.look), fx = el.flip ? 'transform:scaleX(-1);' : '';
       let fl = ''; if (lookOn(L)){ ensureFilter('flt-'+el.id, L); fl = `filter:url(#flt-${el.id});`; }
@@ -1719,6 +1733,9 @@ function renderInspector(){
       <div class="masks">${MASKS.map(([k,l]) => `<button class="mk ${(el.mask||'rect')===k?'on':''}" data-act="set" data-k="mask" data-v="${k}" aria-label="${l} shape"><svg viewBox="0 0 26 26" aria-hidden="true"><path d="${maskPath(k, 26, 26)}"/></svg><small>${l}</small></button>`).join('')}</div>
       ${seg([['none','No frame'],['border','Border'],['polaroid','Print']], 'frame', el.frame)}
       ${el.frame!=='none' ? `<div class="field"><span class="lbl">Frame color</span>${swatches(FRAME_SW,'set','frameColor',el.frameColor,'fcIn')}</div>` : ''}
+      ${el.frame==='polaroid' ? `<div class="field"><span class="lbl">Caption</span><input type="text" id="capIn" data-p="caption" value="${esc(el.caption)}" placeholder="Write under the photo" aria-label="Caption" maxlength="80"></div>
+      <div class="fonts">${Object.entries(FONTS).map(([k,f]) => `<button class="${el.capFont===k?'on':''}" data-act="set" data-k="capFont" data-v="${k}"><span style="font-family:${f.family};font-weight:${f.weight};font-style:${f.style||'normal'}">Aa</span><small>${f.label}</small></button>`).join('')}</div>
+      <div class="field"><span class="lbl">Caption color</span>${swatches(INK_SW,'set','capColor',el.capColor,'ccIn')}</div>` : ''}
       <div class="row"><label class="tog"><input type="checkbox" data-p="shadow" id="shIn" ${el.shadow?'checked':''}> Drop shadow</label>${im ? `<label class="tog"><input type="checkbox" data-p="flip" id="fpIn" ${el.flip?'checked':''}> Flip photo</label>` : ''}</div>
       ${!isMasked(el) ? range('radius','Corner radius', el.radius, 0, 300, 1) : ''}
       ${im ? range('shade','Bottom shade (for text on top)', el.shade||0, 0, 1, .01) : ''}
@@ -2512,6 +2529,12 @@ function drawEl(x, el, fast){
       }
     } else { x.fillStyle = '#D9D6D0'; x.fillRect(i.l, i.t, iw, ih); }
     x.restore();
+    const C = captionLayout(el);
+    if (C){
+      x.font = fontCss(C.f, C.size); if (HAS_LS) x.letterSpacing = '0px';
+      x.fillStyle = el.capColor; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(el.caption, C.l + C.w/2, C.t + C.h/2);
+    }
   } else if (el.type==='text'){
     const L = layoutText(el);
     if (el.box==='fill'){ x.fillStyle = el.boxColor; rr(x,0,0,el.w,L.h,el.size*.15); x.fill(); }
