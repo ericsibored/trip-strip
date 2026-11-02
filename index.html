@@ -571,7 +571,7 @@ const pad2 = n => String(n).padStart(2,'0');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function cv(w,h){ const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; }
 
-let S = {ratio:'4:5', n:5, bg:'#F3EEE6', tpl:'layer', els:[], lib:[]};
+let S = {ratio:'4:5', n:10, bg:'#F3EEE6', tpl:'layer', els:[], lib:[]};
 let P = {guides:true, snap:true};
 const IMG = {};
 let sel = null, crop = null, scale = 0.3, zoomMul = 1, drag = null;
@@ -757,16 +757,21 @@ function sanitize(){
 /* ================= layouts ================= */
 const PLACES = ['Positano','Path of the Gods','Ravello','Amalfi','Capri','Praiano','Sorrento','Atrani','Minori','Furore','Maiori','Cetara'];
 const TEMPLATES = {
-  layer:{name:'Layered', desc:'Background spread, prints on top', gen(n,h,o={}){
-    const els=[Ph(0,0,n*SW,h,{locked:true})], pw=.46*SW, ph=pw*1.22, rots=[-5,4,-3,6,-4,3];
-    els.push(Tx(.07*SW,.07*h,.8*SW,o.title ?? 'Golden hour\non the cliffs',{font:'serif',size:120,color:'#FFFFFF'}));
-    let i=0;
-    for (let cx=.95*SW; cx<n*SW-.3*SW; cx+=.9*SW, i++){
-      const cy=(i%2? .42 : .6)*h, r=rots[i%rots.length];
-      els.push(Ph(cx-pw/2, cy-ph/2, pw, ph, {frame:'polaroid', shadow:true, rot:r}));
-      els.push(St('tape', cx-.13*SW, cy-ph/2-.03*SW, .26*SW, .078*SW, {rot:r*.6}));
+  layer:{name:'Layered', desc:'A place per slide, three prints on its photo', slides:10, gen(n,h,o={}){
+    const back=[], els=[], pw=Math.min(.4*SW, .33*h), ph=pw*1.22, ts=Math.round(clamp(h*.08, 44, 110));
+    const spots=[[.29,.4,-5],[.71,.53,4],[.41,.78,-2]], alt=[[.71,.4,5],[.29,.53,-4],[.59,.78,3]];
+    for (let k=0;k<n;k++){
+      back.push(Ph(k*SW,0,SW,h,{locked:true}));
+      const name = k===0 && o.title ? o.title : PLACES[k%PLACES.length];
+      const t = Tx(k*SW+.07*SW,.055*h,.86*SW,name,{font:'serif',size:ts,color:'#FFFFFF',tshadow:true}); els.push(t);
+      els.push(Tx(k*SW+.07*SW,t.y+layoutText(t).h+6,.6*SW,`${pad2(k+1)} / ${pad2(n)}`,{size:22,upper:true,spacing:4,color:'#FFFFFF',tshadow:true}));
+      (k%2 ? alt : spots).forEach(([fx,fy,r]) => {
+        const cx=k*SW+fx*SW, cy=Math.max(fy*h, .055*h+ts*1.6+ph/2);
+        els.push(Ph(cx-pw/2, cy-ph/2, pw, ph, {frame:'polaroid', shadow:true, rot:r}));
+        els.push(St('tape', cx-pw*.3, cy-ph/2-pw*.07, pw*.6, pw*.18, {rot:r*.6}));
+      });
     }
-    return {bg:'#1E2730', els};
+    return {bg:'#1E2730', els:[...back, ...els]};
   }},
   seam:{name:'Seam Hop', desc:'Frames straddle every swipe', gen(n,h,o={}){
     const ink='#221E1A', mute='#7A6F64', els=[];
@@ -1400,6 +1405,7 @@ function renderTpls(){
 $('#tpls').addEventListener('click', e => {
   const b = e.target.closest('[data-tpl]'); if (!b) return;
   const k = b.dataset.tpl, G = S.mode==='grid';
+  if (!G && TEMPLATES[k].slides) S.n = TEMPLATES[k].slides;
   G ? applyGridTemplate(k) : applyTemplate(k); sel = null; multi = null; crop = null; closeSheet(); renderAll(); commit();
   toast(`${(G ? GTEMPLATES : TEMPLATES)[k].name} applied`, {label:'Undo', fn:undo});
 });
@@ -1899,7 +1905,7 @@ function setMode(m){
   S.other = snap; S.mode = m;
   if (prev){ Object.assign(S, {n:prev.n, rows:prev.rows, ratio:prev.ratio, bg:prev.bg, bg2:prev.bg2, bgType:prev.bgType, tpl:prev.tpl, els:prev.els}); sanitize(); }
   else if (m==='grid'){ S.ratio = '3:4'; S.rows = 3; applyGridTemplate('ghero'); }
-  else { S.ratio = '4:5'; applyTemplate('layer'); }
+  else { S.ratio = '4:5'; S.n = TEMPLATES.layer.slides; applyTemplate('layer'); }
   sel = null; multi = null; crop = null; addMode = false; zoomMul = 1;
   renderAll(); commit(); $('#work').scrollLeft = 0; $('#work').scrollTop = 0;
   toast(m==='grid' ? 'Profile grid: each tile is its own post. Your carousel is kept for when you switch back.' : 'Back to the carousel. Your grid is kept too.', {label:'Undo', fn:undo});
@@ -2971,11 +2977,11 @@ function buildDraft(style, ids, title){
   toast(`Drafted ${S.n} slides from ${r.used} photo${r.used>1?'s':''}` + (left > 0 ? ` · ${left} didn't fit` : ''), {label:'Undo', fn:undo});
 }
 let DS = null;
-const DSTY = [['flow','Flow','Mixed sizes hop the seams'],['layer','Layered','Prints over a spread'],['seam','Seam Hop','One photo per seam'],['circles','Circle Hop','Round crops'],['post','Postcards','Scattered prints'],['stamps','Stamp Album','Perforated stamps'],['duo','Duo','Pairs on each seam'],['mag','Magazine','Cover and pull quotes'],['days','Big Numbers','Day numbers behind'],['split','Split Screen','Full-height photos'],['clothes','Clothesline','Prints on a line'],['film','Film Roll','Contact strip'],['mosaic','Mosaic','Dense grid'],['collage','Collage','Even gutters per slide'],['journal','Journal','Ruled paper and notes'],['scrap','Scrapbook','Torn photos, stickers'],['minimal','Minimal','Whitespace and a line'],['recap','Trip Recap','Big numbers']];
+const DSTY = [['layer','Layered','A place per slide, three prints'],['flow','Flow','Mixed sizes hop the seams'],['seam','Seam Hop','One photo per seam'],['circles','Circle Hop','Round crops'],['post','Postcards','Scattered prints'],['stamps','Stamp Album','Perforated stamps'],['duo','Duo','Pairs on each seam'],['mag','Magazine','Cover and pull quotes'],['days','Big Numbers','Day numbers behind'],['split','Split Screen','Full-height photos'],['clothes','Clothesline','Prints on a line'],['film','Film Roll','Contact strip'],['mosaic','Mosaic','Dense grid'],['collage','Collage','Even gutters per slide'],['journal','Journal','Ruled paper and notes'],['scrap','Scrapbook','Torn photos, stickers'],['minimal','Minimal','Whitespace and a line'],['recap','Trip Recap','Big numbers']];
 function defaultTitle(){ const n = curName().replace(/\s*\(sample\)$/, ''); return /^(new trip|my trip)$/i.test(n) ? 'Our trip' : n; }
 function openDraft(pre){
   const ids = S.lib.filter(id => IMG[id]);
-  const keep = DS ? {style:DS.style, order:DS.order, ratio:S.ratio, title:DS.title} : {style:'flow', order:'time', ratio:S.ratio, title:defaultTitle()};
+  const keep = DS ? {style:DS.style, order:DS.order, ratio:S.ratio, title:DS.title} : {style:'layer', order:'time', ratio:S.ratio, title:defaultTitle()};
   if (!ids.length){ DS = Object.assign(keep, {sel:new Set()}); pickMode = 'draft'; pendingTarget = null; $('#fileIn').click(); return; }
   const real = ids.filter(id => !IMG[id].sample);
   DS = Object.assign(keep, {sel: new Set(pre ? [...(DS && DS.sel ? DS.sel : []), ...pre] : (real.length ? real : ids))});
@@ -3304,7 +3310,7 @@ async function boot(){
   const ok = await load();
   await loadCustomFonts();
   if (!ok){
-    await makeSamples(); applyTemplate('layer');
+    await makeSamples(); S.n = TEMPLATES.layer.slides; applyTemplate('layer');
     const id = uid(); PROJ = {list:[{id, name:'Amalfi (sample)', updated:Date.now(), thumb:'', n:S.n}], cur:id}; REFS[id] = new Set();
   }
   hist = [serialize()]; hi = 0;
