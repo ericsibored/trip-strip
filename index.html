@@ -756,13 +756,14 @@ function sanitize(){
 
 /* ================= layouts ================= */
 const PLACES = ['Positano','Path of the Gods','Ravello','Amalfi','Capri','Praiano','Sorrento','Atrani','Minori','Furore','Maiori','Cetara'];
+const STOPS = ['Seoul','Nokonoshima','Takachiho Gorge','Matsuyama','Nagoya','Kanazawa','Tokyo','Arashiyama','Uji','Kyoto'];
 const TEMPLATES = {
   layer:{name:'Layered', desc:'A place per slide, three prints on its photo', slides:10, gen(n,h,o={}){
     const back=[], els=[], pw=Math.min(.4*SW, .33*h), ph=pw*1.22, ts=Math.round(clamp(h*.08, 44, 110));
     const spots=[[.29,.4,-5],[.71,.53,4],[.41,.78,-2]], alt=[[.71,.4,5],[.29,.53,-4],[.59,.78,3]];
     for (let k=0;k<n;k++){
       back.push(Ph(k*SW,0,SW,h,{locked:true}));
-      const name = k===0 && o.title ? o.title : PLACES[k%PLACES.length];
+      const name = k===0 && o.title ? o.title : STOPS[k%STOPS.length];
       const t = Tx(k*SW+.07*SW,.055*h,.86*SW,name,{font:'serif',size:ts,color:'#FFFFFF',tshadow:true}); els.push(t);
       els.push(Tx(k*SW+.07*SW,t.y+layoutText(t).h+6,.6*SW,`${pad2(k+1)} / ${pad2(n)}`,{size:22,upper:true,spacing:4,color:'#FFFFFF',tshadow:true}));
       (k%2 ? alt : spots).forEach(([fx,fy,r]) => {
